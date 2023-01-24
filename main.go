@@ -5,6 +5,9 @@ import "math/rand"
 import "strings"
 import "regexp"
 import "errors"
+import "os"
+import "bufio"
+import "strconv"
 
 // split word into 3-character chunks
 func getCharacterChunks(word string) []string {
@@ -34,7 +37,7 @@ func splitTextToLowercaseWords(text string) []string {
 type ChunkCounts map[string]int
 
 func getChunksFromText(text string) ChunkCounts {
-	result := make(map[string]int)
+	result := make(ChunkCounts)
 	for _, word := range splitTextToLowercaseWords(text) {
 		for _, chunk := range getCharacterChunks(word) {
 			if chunk != "" {
@@ -45,6 +48,36 @@ func getChunksFromText(text string) ChunkCounts {
 	// TODO we should postprocess the result to avoid having "dead end" chunks that have ending chars with no matching start chars
 	//      then we can get rid of the error in getNextChar
 	return result
+}
+
+func getChunksFromFile(filename string) (ChunkCounts, error) {
+	result := make(ChunkCounts)
+	f, err := os.Open(filename)
+
+    if err != nil {
+        return nil, err
+     }
+
+    defer f.Close()
+
+    scanner := bufio.NewScanner(f)
+    scanner.Split(bufio.ScanWords)
+
+	nonWordChars := regexp.MustCompile(`[\W_]+`)
+    for scanner.Scan() {
+		word := nonWordChars.ReplaceAllString(strings.ToLower(scanner.Text()),"")
+		// TODO investigate removing stop words like "the", "not", etc to avoid skewing the corpus
+		for _, chunk := range getCharacterChunks(word) {
+			if chunk != "" {
+				result[chunk]++
+			}
+		}
+    }
+
+    if err := scanner.Err(); err != nil {
+        return nil,err
+    }
+	return result, nil
 }
 
 type AdjacentChunkMap map[string][]string
@@ -139,15 +172,45 @@ func printDebugInfo(chunkCounts ChunkCounts) {
 }
 
 func main() {
-	chunkCounts := getChunksFromText(DefaultInputSmall)
+	args := os.Args[1:]
+	corpusFile := "corpus.txt"
+	wordLength := 6
+	numWords := 150
+	var err error
+	// TODO use proper options instead of positional arguments
+	if len(args) > 0 {
+		corpusFile = args[0]
+	}
+	if len(args) > 1 {
+		wordLength, err = strconv.Atoi(args[1])
+		if err != nil || wordLength > 20 {
+			fmt.Println("Invalid word length")
+			wordLength = 6
+		}
+	}
+	if len(args) > 2 {
+		numWords, err = strconv.Atoi(args[2])
+		if err != nil || numWords > 1000 {
+			fmt.Println("Maximum for number of words is 1000")
+			numWords = 1000
+		}
+	}
+	chunkCounts, err := getChunksFromFile(corpusFile)
+	if err != nil {
+		fmt.Printf("Could not read file %v\nUsing default corpus.\n", corpusFile)
+		chunkCounts = getChunksFromText(DefaultInputSmall)
+	}
 	// printDebugInfo(chunkCounts)
-	for i := 0; i < 50; i++ {
-		word, err := getWord(chunkCounts, 6)
+	for i := 0; i < numWords; i++ {
+		word, err := getWord(chunkCounts, wordLength)
 		if err != nil {
 			fmt.Println(err)
 			break
 		} else {
-			fmt.Printf("Word: %v\n", word)
+			fmt.Printf("%v  ", word)
+			if (i+1) % 5 == 0 {
+				fmt.Println("")
+			}
 		}
 	}
 	fmt.Println("")

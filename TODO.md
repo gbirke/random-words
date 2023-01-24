@@ -1,10 +1,10 @@
 # Next steps
 
-- [ ] Read text from file
 - [ ] Refactor to domain classes: Chunk (for encapsulating firstchar, lastchar,
 	etc), Corpus and WordGenerator
 - [ ] Avoid "dead end" chunks
-- [ ] Create CLI
+- [ ] Regenerate duplicate words
+- [ ] Create CLI with options
 - [ ] Use stop words when processing text
 - [ ] generate words in parallel, using goroutines
 - [ ] Corpus statistics to get a feeling how different each word will be
@@ -14,3 +14,4 @@
 # Done
 
 - [x] Weighted chunk selection
+- [x] Read text from file
