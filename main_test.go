@@ -117,7 +117,23 @@ func TestGetChunksFromText(t *testing.T) {
 				}
 			}
 		})
-
 	}
+}
 
+func TestGetAdjacentChunkMap(t *testing.T) {
+	chunkMap := getAdjacentChunkMap([]string{"the", "thi", "her", "hep", "hel", "ill"})
+	expected := map[string][]string{"th": {"the", "thi"}, "he": {"her", "hep", "hel"}, "il": {"ill"}}
+
+	if len(expected) != len(chunkMap) {
+		t.Fatalf(`Want: %v Got: %v (%v)`, len(expected), len(chunkMap), chunkMap)
+	}
+	for startChars, chunks := range expected {
+		actualChunks, ok := chunkMap[startChars]
+		if !ok {
+			t.Fatalf(`Starting chars "%v" not found in %v`, startChars, chunkMap)
+		}
+		if len(actualChunks) != len(chunks) {
+			t.Fatalf(`Want: %v (%v) Got: %v (%v)`, len(actualChunks), actualChunks, len(chunks), chunks)
+		}
+	}
 }
