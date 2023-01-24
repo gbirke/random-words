@@ -42,6 +42,8 @@ func getChunksFromText(text string) ChunkCounts {
 			}
 		}
 	}
+	// TODO we should postprocess the result to avoid having "dead end" chunks that have ending chars with no matching start chars
+	//      then we can get rid of the error in getNextChar
 	return result
 }
 
@@ -63,10 +65,31 @@ func getNextChar(currentChunk string, allChunks ChunkCounts, adjacentChunks Adja
 		return "", errors.New(fmt.Sprintf("No adjacent chunk found for %v", currentChunk))
 	}
 
-	// TODO use weights from allChunks to weigh result
-	idx := rand.Intn(len(candidateChunks))
+	// No random selection for small adjacencies
+	if len(candidateChunks) == 1 {
+		return candidateChunks[0][2:], nil
+	}
 
-	return candidateChunks[idx][2:], nil
+	// Weighted selection, see https://stackoverflow.com/a/11872928/130121
+	weightedChunks := make(ChunkCounts, len(candidateChunks))
+	sumWeights := 0
+	for _, chunk := range candidateChunks {
+		weightedChunks[chunk] = allChunks[chunk]
+		sumWeights += weightedChunks[chunk]
+	}
+
+	targetWeight := rand.Intn(sumWeights)
+
+	for chunk, weight := range weightedChunks {
+		targetWeight -= weight
+		if targetWeight <= 0 {
+			return chunk[2:], nil
+		}
+	}
+
+	// This should never happen
+	// TODO use different error classes to distinguish algorithm error and corpus error
+	return "", errors.New("did not get weighted result, this should never happen")
 }
 
 func getChunksFromCounts(chunkCounts ChunkCounts) []string {
@@ -119,7 +142,7 @@ func main() {
 	chunkCounts := getChunksFromText(DefaultInputSmall)
 	// printDebugInfo(chunkCounts)
 	for i := 0; i < 50; i++ {
-		word, err := getWord(chunkCounts, 7)
+		word, err := getWord(chunkCounts, 6)
 		if err != nil {
 			fmt.Println(err)
 			break
