@@ -1,7 +1,5 @@
 # Next steps
 
-- [ ] Refactor to domain classes: Chunk (for encapsulating firstchar, lastchar,
-	etc), Corpus and WordGenerator
 - [ ] Avoid "dead end" chunks
 - [ ] Regenerate duplicate words
 - [ ] Create CLI with options

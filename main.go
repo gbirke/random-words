@@ -1,175 +1,13 @@
 package main
 
-import "fmt"
-import "math/rand"
-import "strings"
-import "regexp"
-import "errors"
-import "os"
-import "bufio"
-import "strconv"
-
-// split word into 3-character chunks
-func getCharacterChunks(word string) []string {
-	const ChunkLength = 3
-	length := len(word)
-	if length < ChunkLength {
-		return []string{}
-	}
-
-	var result = make([]string, length-2)
-	for i := 0; i < length-ChunkLength+1; i++ {
-		result[i] = word[i : i+ChunkLength]
-	}
-	return result
-}
-
-func splitTextToLowercaseWords(text string) []string {
-	wordBoundary := regexp.MustCompile(`\W+`)
-	words := wordBoundary.Split(strings.ToLower(text), -1)
-	// TODO investigate removing stop words like "the", "not", etc to avoid skewing the corpus
-	if words[len(words)-1] == "" {
-		return words[:len(words)-1]
-	}
-	return words
-}
-
-type ChunkCounts map[string]int
-
-func getChunksFromText(text string) ChunkCounts {
-	result := make(ChunkCounts)
-	for _, word := range splitTextToLowercaseWords(text) {
-		for _, chunk := range getCharacterChunks(word) {
-			if chunk != "" {
-				result[chunk]++
-			}
-		}
-	}
-	// TODO we should postprocess the result to avoid having "dead end" chunks that have ending chars with no matching start chars
-	//      then we can get rid of the error in getNextChar
-	return result
-}
-
-func getChunksFromFile(filename string) (ChunkCounts, error) {
-	result := make(ChunkCounts)
-	f, err := os.Open(filename)
-
-    if err != nil {
-        return nil, err
-     }
-
-    defer f.Close()
-
-    scanner := bufio.NewScanner(f)
-    scanner.Split(bufio.ScanWords)
-
-	nonWordChars := regexp.MustCompile(`[\W_]+`)
-    for scanner.Scan() {
-		word := nonWordChars.ReplaceAllString(strings.ToLower(scanner.Text()),"")
-		// TODO investigate removing stop words like "the", "not", etc to avoid skewing the corpus
-		for _, chunk := range getCharacterChunks(word) {
-			if chunk != "" {
-				result[chunk]++
-			}
-		}
-    }
-
-    if err := scanner.Err(); err != nil {
-        return nil,err
-    }
-	return result, nil
-}
-
-type AdjacentChunkMap map[string][]string
-
-func getAdjacentChunkMap(chunks []string) AdjacentChunkMap {
-	result := make(map[string][]string)
-	for _, chunk := range chunks {
-		startChars := chunk[0:2]
-		result[startChars] = append(result[startChars], chunk)
-	}
-	return result
-}
-
-func getNextChar(currentChunk string, allChunks ChunkCounts, adjacentChunks AdjacentChunkMap) (string, error) {
-	lastChars := currentChunk[1:]
-	candidateChunks, ok := adjacentChunks[lastChars]
-	if !ok {
-		return "", errors.New(fmt.Sprintf("No adjacent chunk found for %v", currentChunk))
-	}
-
-	// No random selection for small adjacencies
-	if len(candidateChunks) == 1 {
-		return candidateChunks[0][2:], nil
-	}
-
-	// Weighted selection, see https://stackoverflow.com/a/11872928/130121
-	weightedChunks := make(ChunkCounts, len(candidateChunks))
-	sumWeights := 0
-	for _, chunk := range candidateChunks {
-		weightedChunks[chunk] = allChunks[chunk]
-		sumWeights += weightedChunks[chunk]
-	}
-
-	targetWeight := rand.Intn(sumWeights)
-
-	for chunk, weight := range weightedChunks {
-		targetWeight -= weight
-		if targetWeight <= 0 {
-			return chunk[2:], nil
-		}
-	}
-
-	// This should never happen
-	// TODO use different error classes to distinguish algorithm error and corpus error
-	return "", errors.New("did not get weighted result, this should never happen")
-}
-
-func getChunksFromCounts(chunkCounts ChunkCounts) []string {
-	chunks := make([]string, len(chunkCounts))
-	i := 0
-	for k := range chunkCounts {
-		chunks[i] = k
-		i++
-	}
-	return chunks
-}
-
-func getWord(chunkCounts ChunkCounts, length int) (string, error) {
-	chunks := getChunksFromCounts(chunkCounts)
-	chunkMap := getAdjacentChunkMap(chunks)
-
-	currentChunk := chunks[rand.Intn(len(chunks))]
-	word := currentChunk
-	failedChunks := make([]string, length)
-	for i := 3; i <= length; i++ {
-		nextChar, err := getNextChar(currentChunk, chunkCounts, chunkMap)
-		if err != nil {
-			failedChunks = append(failedChunks, currentChunk)
-			if len(failedChunks) > length*2 {
-				// TODO maybe return failedChunks for diagnosis
-				return "", errors.New(fmt.Sprintf("Could not find a matching chunks %v times, maybe your input text is too small", len(failedChunks)))
-			}
-			// reset the loop, start fresh
-			i = 3
-			currentChunk = chunks[rand.Intn(len(chunks))]
-			word = currentChunk
-			continue
-		}
-		word += nextChar
-		currentChunk = word[len(word)-3:]
-	}
-	return word, nil
-}
+import (
+	"fmt"
+	"github.com/gbirke/random-words/wordgenerator"
+	"os"
+	"strconv"
+)
 
 const DefaultInputSmall = `But there is something that I must say to my people, who stand on the warm threshold which leads into the palace of justice: In the process of gaining our rightful place, we must not be guilty of wrongful deeds. Let us not seek to satisfy our thirst for freedom by drinking from the cup of bitterness and hatred. We must forever conduct our struggle on the high plane of dignity and discipline. We must not allow our creative protest to degenerate into physical violence. Again and again, we must rise to the majestic heights of meeting physical force with soul force. ... I am not unmindful that some of you have come here out of great trials and tribulations. Some of you have come fresh from narrow jail cells. And some of you have come from areas where your quest -- quest for freedom left you battered by the storms of persecution and staggered by the winds of police brutality. You have been the veterans of creative suffering. Continue to work with the faith that unearned suffering is redemptive. Go back to Mississippi, go back to Alabama, go back to South Carolina, go back to Georgia, go back to Louisiana, go back to the slums and ghettos of our northern cities, knowing that somehow this situation can and will be changed. Let us not wallow in the valley of despair, I say to you today, my friends. And so even though we face the difficulties of today and tomorrow, I still have a dream. It is a dream deeply rooted in the American dream. I have a dream that one day this nation will rise up and live out the true meaning of its creed: "We hold these truths to be self-evident, that all men are created equal." I have a dream that one day on the red hills of Georgia, the sons of former slaves and the sons of former slave owners will be able to sit down together at the table of brotherhood. I have a dream that one day even the state of Mississippi, a state sweltering with the heat of injustice, sweltering with the heat of oppression, will be transformed into an oasis of freedom and justice. I have a dream that my four little children will one day live in a nation where they will not be judged by the color of their skin but by the content of their character.`
-
-func printDebugInfo(chunkCounts ChunkCounts) {
-	fmt.Printf("%v", chunkCounts)
-	fmt.Println("")
-	fmt.Printf("%v", getAdjacentChunkMap(getChunksFromCounts(chunkCounts)))
-	fmt.Println("")
-}
 
 func main() {
 	args := os.Args[1:]
@@ -195,20 +33,24 @@ func main() {
 			numWords = 1000
 		}
 	}
-	chunkCounts, err := getChunksFromFile(corpusFile)
+	generator, err := wordgenerator.NewWordGeneratorFromFile(corpusFile)
 	if err != nil {
 		fmt.Printf("Could not read file %v\nUsing default corpus.\n", corpusFile)
-		chunkCounts = getChunksFromText(DefaultInputSmall)
+		generator, err = wordgenerator.NewWordGeneratorFromString(DefaultInputSmall)
+		if err != nil {
+			panic("Could not generate corpus from defaults")
+		}
 	}
-	// printDebugInfo(chunkCounts)
+	// wordgenerator.PrintDebugInfo(chunkCounts)
 	for i := 0; i < numWords; i++ {
-		word, err := getWord(chunkCounts, wordLength)
+		word, err := generator.GetWord(wordLength)
 		if err != nil {
 			fmt.Println(err)
 			break
 		} else {
 			fmt.Printf("%v  ", word)
-			if (i+1) % 5 == 0 {
+			// TODO add CLI flag for output format
+			if (i+1)%5 == 0 {
 				fmt.Println("")
 			}
 		}
