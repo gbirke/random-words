@@ -1,0 +1,4 @@
+# Corpus files that are laying around
+*.txt
+# built binary
+random-words
